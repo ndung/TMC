@@ -1,0 +1,8 @@
+C:\Workplace\TMC\TMC\bin\x86\Debug\TMC.exe.config
+C:\Workplace\TMC\TMC\bin\x86\Debug\TMC.exe
+C:\Workplace\TMC\TMC\bin\x86\Debug\TMC.pdb
+C:\Workplace\TMC\TMC\bin\x86\Debug\log4net.dll
+C:\Workplace\TMC\TMC\bin\x86\Debug\log4net.xml
+C:\Workplace\TMC\TMC\obj\x86\Debug\TMC.csprojResolveAssemblyReference.cache
+C:\Workplace\TMC\TMC\obj\x86\Debug\TMC.exe
+C:\Workplace\TMC\TMC\obj\x86\Debug\TMC.pdb

@@ -233,6 +233,7 @@ namespace TMC.Util
                     }
                 }
             }
+            /*
             if (p.http_url.StartsWith("/sendUSSD"))
             {
                 string port = pars["port"];
@@ -334,11 +335,12 @@ namespace TMC.Util
                 p.writeSuccess();
                 p.outputStream.WriteLine("ok");
             }
-            else if (p.http_url.StartsWith("/getActivePorts"))
+            else */if (p.http_url.StartsWith("/getActivePorts"))
             {
                 p.writeSuccess();
                 p.outputStream.WriteLine(Communicator.GetActivePorts());
             }
+            /**
             else if (p.http_url.StartsWith("/mtronik"))
             {
                 string port = pars["port"];
@@ -352,7 +354,7 @@ namespace TMC.Util
                 string pin = pars["pin"];
 
                 Communicator.StokMTronik(port, pin);
-            }
+            }*/
             /**
             Console.WriteLine("request: {0}", p.http_url);
             p.writeSuccess();

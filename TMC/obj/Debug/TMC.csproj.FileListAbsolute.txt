@@ -1,0 +1,7 @@
+C:\Workplace\TMC\TMC\bin\Debug\TMC.exe.config
+C:\Workplace\TMC\TMC\bin\Debug\TMC.exe
+C:\Workplace\TMC\TMC\bin\Debug\TMC.pdb
+C:\Workplace\TMC\TMC\bin\Debug\log4net.dll
+C:\Workplace\TMC\TMC\bin\Debug\log4net.xml
+C:\Workplace\TMC\TMC\obj\Debug\TMC.exe
+C:\Workplace\TMC\TMC\obj\Debug\TMC.pdb

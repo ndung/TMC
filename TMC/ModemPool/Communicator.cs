@@ -13,7 +13,7 @@ namespace TMC.ModemPool
     public class Communicator
     {
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-
+            
         Dictionary<string, PortHandler> modemMap;
         Dictionary<string, PortHandler> simMap;
 
@@ -23,8 +23,9 @@ namespace TMC.ModemPool
         private readonly System.Timers.Timer timer;
         private const int INTERVAL = 10000;
         private string[] cdmaPorts;
+        private List<string> ignoredPorts;
 
-        public Communicator(string readSMSTimer, string cdmaPort)
+        public Communicator(string readSMSTimer, string cdmaPort, string ignoredPort)
         {
             modemMap = new Dictionary<string, PortHandler>();
             simMap = new Dictionary<string, PortHandler>();
@@ -36,6 +37,7 @@ namespace TMC.ModemPool
                 timer.Start();
             }
             cdmaPorts = cdmaPort.Split(',');
+            ignoredPorts = new List<string>(ignoredPort.Split(','));
         }
 
         public string[] GetAllPorts()
@@ -48,9 +50,15 @@ namespace TMC.ModemPool
         public string GetActivePorts()
         {
             string rs = "";
+            ignoredPorts.ForEach(Console.WriteLine);
             foreach (string portName in simMap.Keys)
             {
-                rs = rs + portName + ",";
+                if (!ignoredPorts.Contains(portName))
+                {
+                    // the array contains the string and the pos variable
+                    // will have its position in the array
+                    rs = rs + portName + ",";
+                } 
             }
             return rs;
         }
@@ -59,22 +67,35 @@ namespace TMC.ModemPool
         {
             foreach (string portName in GetAllPorts())
             {
-                OpenPort(portName);
+                if (!ignoredPorts.Contains(portName))
+                {
+                    OpenPort(portName);
+                }
             }
         }
 
         public void OpenPort(string portName)
         {
             PortHandler portHandler = new PortHandler();
-            portHandler.OpenPort(portName, "115200");
-            modemMap.Add(portName, portHandler);
+            bool opened = portHandler.OpenPort(portName, "115200");
+            Console.WriteLine("open "+portName+"="+ opened);
+            if (opened)
+            {
+                modemMap.Add(portName, portHandler);
+            }else
+            {
+                ignoredPorts.Add(portName);
+            }
         }
 
         public void CloseAllPorts()
         {
             foreach (string portName in GetAllPorts())
             {
-                ClosePort(portName);
+                if (!ignoredPorts.Contains(portName))
+                {
+                    ClosePort(portName);
+                }
             }
         }
 
@@ -106,6 +127,7 @@ namespace TMC.ModemPool
             string response = handler.ProcessCommand(CommandType.CHECK_SIM_MODEM, new object[] { });
             if (response != null)
             {
+                Console.WriteLine("check " + portName + "=" + response);
                 if (response.Equals(Constants.SIM_READY))
                 {
                     if (!simMap.ContainsKey(portName))

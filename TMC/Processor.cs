@@ -83,18 +83,12 @@ namespace TMC
                     if (response.Contains("+CMGS:"))
                     {
                         response = response.Substring(response.IndexOf("+CMGS:"));
-                        Console.WriteLine("0:" + response);
                         response = response.Replace("+CMGS:", "");
-                        Console.WriteLine("1:" + response);
                         response = response.Replace("OK", "");
-                        Console.WriteLine("2:" + response);
                         response = response.Replace("\r", "");
-                        Console.WriteLine("3:" + response);
                         response = response.Replace("\n", "");
-                        Console.WriteLine("4:" + response);
                     }
                     response = response.Trim();
-                    Console.WriteLine("5:" + id + response);
                     int n;
                     bool isNumeric = int.TryParse(response, out n);
                     if (isNumeric)
@@ -248,15 +242,10 @@ namespace TMC
                 {
                     data = data.Substring(data.IndexOf("+CMGL:"));
                     data = data.Replace("+CMGL:", "").Trim();
-                    log.Info("1:" + data);
                     data = data.Replace("OK", "");
-                    log.Info("2:" + data);
                     data = data.Replace("\r", "");
-                    log.Info("3:" + data);
                     data = data.Replace("\n", "");
-                    log.Info("4:" + data);
                     data = data.Replace("\"", "");
-                    log.Info("5:" + data);
                     data = data.Trim();
 
                     if (!data.Equals("AT CMGL") && !data.Equals("\"ALL\""))
@@ -270,7 +259,7 @@ namespace TMC
                             }
                             else
                             {
-                                SocketClient.Send("READSM" + arg.COMPort.PadRight(5, ' ') + data);
+                                SocketClient.Send("READSM" + arg.COMPort.PadRight(6, ' ') + data);
                             }
                         }
                     }

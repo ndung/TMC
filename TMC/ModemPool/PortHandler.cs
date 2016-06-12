@@ -19,7 +19,7 @@ namespace TMC.ModemPool
         private string baudRate;
 
         //Open Port
-        public void OpenPort(string strPortName, string strBaudRate)
+        public bool OpenPort(string strPortName, string strBaudRate)
         {
             try
             {
@@ -42,12 +42,14 @@ namespace TMC.ModemPool
                 serialPort.RtsEnable = true;
 
                 log.Info("Connected at Port " + strPortName);
+                return true;
             }
             catch (Exception ex)
             {
                 Console.WriteLine("opening port exception: " + ex.StackTrace);
                 log.Error("opening port exception: " + ex.Message);
             }
+            return false;
         }
 
         //Close Port
@@ -336,7 +338,6 @@ namespace TMC.ModemPool
                 response = ExecCommand(cmd, 30000, "CUSD");
             }
             return response;
-
         }
 
         private string SelectRegistrationMenu(string response)
@@ -811,11 +812,11 @@ namespace TMC.ModemPool
         private string DeleteSMS(string deleteFlag)
         {
             Thread.Sleep(500);
-            string response = ExecCommand("AT+CMEE=1", 300, "CMEE");
+            string response = ExecCommand("AT+CMEE=1", 5000, "CMEE");
             if (response.Contains("OK"))
             {
                 Thread.Sleep(500);
-                response = ExecCommand("AT + CMGD = 1, " + deleteFlag, 300, "CMGD");
+                response = ExecCommand("AT + CMGD = 1, " + deleteFlag, 5000, "CMGD");
             }
             return response;
         }
