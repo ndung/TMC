@@ -9,6 +9,13 @@ namespace TMC.ModemPool
 {
     class PortHandler
     {
+        private Communicator communicator;
+
+        public PortHandler(Communicator communicator)
+        {
+            this.communicator = communicator;
+        }
+
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
         private SerialPort serialPort;
@@ -33,13 +40,14 @@ namespace TMC.ModemPool
                 serialPort.DataBits = 8;
                 serialPort.StopBits = StopBits.One;
                 serialPort.Parity = Parity.None;
+                serialPort.Handshake = Handshake.RequestToSend;
                 serialPort.ReadTimeout = 300;
                 serialPort.WriteTimeout = 300;
                 serialPort.Encoding = Encoding.GetEncoding("iso-8859-1");
                 serialPort.DataReceived += new SerialDataReceivedEventHandler(port_DataReceived);
-                serialPort.Open();
                 serialPort.DtrEnable = true;
                 serialPort.RtsEnable = true;
+                serialPort.Open();
 
                 log.Info("Connected at Port " + strPortName);
                 return true;
@@ -109,12 +117,100 @@ namespace TMC.ModemPool
                 return ex.Message;
             }
         }
+            
+        string indata = "";
+        string tempData = "";
+
+        private readonly object newSyncLock = new object();
 
         //Receive data from port
         private void port_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
             if (e.EventType == SerialData.Chars)
-                receiveNow.Set();
+            {
+                //lock (newSyncLock) { 
+                    SerialPort sp = (SerialPort)sender;
+                    indata = sp.ReadExisting();
+                    /*if (!tempData.Equals(""))
+                    {
+                        indata = tempData + indata;
+                    }*/
+
+                    //string[] stringSeparators = new string[] { "\r\n" };
+                    //string[] lines = indata.Split(stringSeparators, StringSplitOptions.None);
+
+                if (indata.Contains("+CMT") || indata.Contains("+CDS"))
+                {
+                    try
+                    {
+                        string temp = String.Empty;
+                        if (indata.Contains("\r\n+CMT"))
+                        {
+                            temp = indata.Substring(indata.IndexOf("\r\n+CMT"));
+                                if (temp.Substring(2).Contains("\r\n"))
+                                {
+                                    temp = temp.Substring(0, temp.Substring(2).IndexOf("\r\n") + 4);
+                                }
+                            
+                        }
+                        else if (indata.Contains("\r\n+CDS")) {
+                             temp = indata.Substring(indata.IndexOf("\r\n+CDS"));
+                                if (temp.Substring(2).Contains("\r\n")) { 
+                                    temp = temp.Substring(0, temp.Substring(2).IndexOf("\r\n") + 4);
+                                }
+                            
+                        }
+                        log.Debug("incoming data:[" + temp + "]");
+                        if (temp.Contains("+CMTI") && temp.Contains(","))
+                        {
+                            string position = indata.Split(',')[1].Trim().Replace("\r\n", "");
+                            communicator.ReadIncomingSMS(portName, position);
+                        }
+                        else
+                        {
+                            communicator.OnIncomingSMS(portName, indata);
+                        }
+                        if (!temp.Equals(String.Empty))
+                        {
+                            indata = indata.Replace(temp, "");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Error("error", ex);
+                    }
+                }
+                if (!indata.Equals(String.Empty))
+                {
+                    receiveNow.Set();
+                }
+                
+                /**if (indata.EndsWith("\r\n") || indata.Contains(">") || indata.EndsWith("\r")) {
+                        if (indata.Contains("+CMT") || indata.Contains("+CDS"))
+                        {
+                            log.Debug("incoming data:" + indata);
+                            if (indata.Contains("+CMTI") && indata.Contains(","))
+                            {
+                                string position = indata.Split(',')[1];
+                                communicator.ReadIncomingSMS(portName, position);
+                            }
+                            else
+                            {
+                                communicator.OnIncomingSMS(portName, indata);
+                            }
+                        }
+                        else
+                        {
+                            receiveNow.Set();
+                        }
+                        tempData = "";
+                    }
+                    else
+                    {
+                        tempData = tempData + indata;
+                    }
+                }*/
+            }
         }
 
         private string ReadResponse(string command, int timeout, string cmdType)
@@ -130,7 +226,7 @@ namespace TMC.ModemPool
                     {
                         if (receiveNow.WaitOne(timeout, false))
                         {
-                            string t = serialPort.ReadExisting();
+                            string t = indata;// serialPort.ReadExisting();
                             buffer += t;
 
                             if (buffer.Contains("CUSD:") && buffer.EndsWith("\r\n"))
@@ -175,7 +271,7 @@ namespace TMC.ModemPool
                     {
                         if (receiveNow.WaitOne(timeout, false))
                         {
-                            string t = serialPort.ReadExisting();
+                            string t = indata;//serialPort.ReadExisting();
                             buffer += t;
                         }
                         else
@@ -202,7 +298,7 @@ namespace TMC.ModemPool
                     {
                         if (receiveNow.WaitOne(timeout, false))
                         {
-                            string t = serialPort.ReadExisting();
+                            string t = indata;//serialPort.ReadExisting();
                             buffer += t;
                         }
                         else
@@ -229,7 +325,7 @@ namespace TMC.ModemPool
                     {
                         if (receiveNow.WaitOne(timeout, false))
                         {
-                            string t = serialPort.ReadExisting();
+                            string t = indata;//serialPort.ReadExisting();
                             buffer += t;
                         }
                         else
@@ -254,7 +350,7 @@ namespace TMC.ModemPool
                 {
                     if (receiveNow.WaitOne(timeout, false))
                     {
-                        string t = serialPort.ReadExisting();
+                        string t = indata;//serialPort.ReadExisting();
                         buffer += t;
                     }
                     else
@@ -280,7 +376,7 @@ namespace TMC.ModemPool
                     {
                         if (receiveNow.WaitOne(timeout, false))
                         {
-                            string t = serialPort.ReadExisting();
+                            string t = indata;//serialPort.ReadExisting();
                             buffer += t;
                         }
                         else
@@ -302,10 +398,23 @@ namespace TMC.ModemPool
             return buffer;
         }
 
+        private void ActivateIncomingSMSIndicator()
+        {
+            string response = ExecCommand("AT+CMGF=1", 300, "CMGF");
+            if (response.Contains("OK"))
+            {
+                response = ExecCommand("AT+CNMI=2,1,0,0,0", 300, "CNMI");
+                if (response.Contains("OK"))
+                {
+                    response = ExecCommand("AT + CSMP = 49,167,0,0", 300, "CSMP");
+                    log.Debug("CSMP:"+response); 
+                }
+            }
+        }
 
         private string CheckSIMModem()
         {
-            string response = ExecCommand("AT", 300, "AT");
+            string response = "OK"; //ExecCommand("AT", 300, "AT");
             if (response.Contains("OK"))
             {
                 response = ExecCommand("AT+CPIN?", 300, "CPIN");
@@ -324,6 +433,11 @@ namespace TMC.ModemPool
             }
         }
 
+        private string RestartModem()
+        {
+            return ExecCommand("AT+CFUN=1", 5000, "CFUN");            
+        }
+
         private string ProcessUSSD(string command)
         {
             string response = ExecCommand("AT+CMGF=0", 300, "CMGF");
@@ -339,6 +453,7 @@ namespace TMC.ModemPool
             }
             return response;
         }
+
 
         private string SelectRegistrationMenu(string response)
         {
@@ -396,175 +511,7 @@ namespace TMC.ModemPool
             }
             return "";
         }
-
-        private string MTronik(string denom, string msisdn)
-        {
-            /**string response = ExecCommand("AT+STSF=2,\"5FFFFFFF7F\"", 30000, "STSF");
-            response = ExecCommand("AT+STSF=1", 3000, "STSF");
-            
-            if (!response.Contains("OK"))
-            {
-                return response;
-            }*/
-
-            string response = ExecCommand("AT+STGI=0", 500, "STGI");
-            log.Debug(response);
-            
-            response = ExecCommand("AT+STGR=0,1,1", 5000, "STGR");
-            string stin = GetSTIN(response);
-            if (stin.Equals("") || stin.Equals("99"))
-            {
-                return "99";
-            }
-            response = ExecCommand("AT+STGI=" + stin, 5000, "STGI");
-            log.Debug(response);
-            response = ExecCommand("AT+STGR=" + stin + ",1", 5000, "STGR");
-            response = ExecCommand(msisdn + (char)26, 5000, "STGR");
-            stin = GetSTIN(response);
-            if (stin.Equals("") || stin.Equals("99"))
-            {
-                return "99";
-            }
-            response = ExecCommand("AT+STGI=" + stin, 5000, "STGI");
-            log.Debug(response);
-
-            if (denom.Equals("5000"))
-            {
-                response = ExecCommand("AT+STGR=" + stin + ",1,1", 5000, "STGR");
-                stin = GetSTIN(response);
-            }
-            else if (denom.Equals("10000"))
-            {
-                response = ExecCommand("AT+STGR=" + stin + ",1,3", 5000, "STGR");
-                stin = GetSTIN(response);
-            }
-            else if (denom.Equals("25000"))
-            {
-                response = ExecCommand("AT+STGR=" + stin + ",1,5", 5000, "STGR");
-                stin = GetSTIN(response);
-            }
-            else 
-            {
-                response = ExecCommand("AT+STGR=" + stin + ",1,6", 5000, "STGR");
-                stin = GetSTIN(response);
-
-                if (stin.Equals("") || stin.Equals("99"))
-                {
-                    return "99";
-                }
-
-                response = ExecCommand("AT+STGI=" + stin, 5000, "STGI");
-                log.Debug("response1:"+response);
-                /**
-                response = ExecCommand("AT+STGR=" + stin + ",1,1", 5000, "STGR");
-                log.Debug("response2:" + response);
-                stin = GetSTIN(response);
-                log.Debug("response3:" + stin);
-
-                if (stin.Equals("") || stin.Equals("99"))
-                {
-                    return "99";
-                }
-
-                response = ExecCommand("AT+STGI=" + stin, 5000, "STGI");
-                log.Debug("response4:"+response);*/
-                response = ExecCommand("AT+STGR=" + stin + ",1", 5000, "STGR");
-                log.Debug("response5:" + response);
-                
-                response = ExecCommand(denom + (char)26, 5000, "STGR");
-                log.Debug("response6:" + response);
-
-                stin = GetSTIN(response);
-            }
-
-            if (stin.Equals("") || stin.Equals("99"))
-            {
-                return "99";
-            }
-
-            response = ExecCommand("AT+STGI=" + stin, 5000, "STGI");
-            log.Debug(response);
-            response = ExecCommand("AT+STGR=" + stin + ",1,1", 5000, "STGR");
-            stin = GetSTIN(response);
-
-            if (stin.Equals("") || stin.Equals("99"))
-            {
-                return "99";
-            }
-
-            response = ExecCommand("AT+STGI=" + stin, 5000, "STGI");
-            log.Debug(response);
-            response = ExecCommand("AT+STGR=" + stin + ",1", 5000, "STGR");
-            response = ExecCommand("123456", 5000, "STGR");
-            stin = GetSTIN(response);
-
-            if (stin.Equals("") || stin.Equals("99"))
-            {
-                return "99";
-            }
-            response = ExecCommand("AT+STGI=" + stin, 5000, "STGI");
-            log.Debug(response);
-            response = ExecCommand("AT+STGR=1,1,1", 5000, "STGR");
-            log.Debug(response);
-
-            stin = GetSTIN(response);
-
-            if (stin.Equals("") || stin.Equals("99"))
-            {
-                return "99";
-            }
-            response = ExecCommand("AT+STGI=" + stin, 5000, "STGI");
-            log.Debug(response);
-            //response = ExecCommand("AT+STGR=1,1,1", 5000, "STGR");
-            //log.Debug(response);
-            return response;
-        }
-
-        private string StokMTronik(string pin)
-        {
-            string response = ExecCommand("AT+STGI=0", 500, "STGI");
-            log.Debug("0:"+response);
-
-            response = ExecCommand("AT+STGR=0,1,3", 5000, "STGR");
-            string stin = GetSTIN(response);
-            if (stin.Equals("") || stin.Equals("99"))
-            {
-                return "99";
-            }
-            response = ExecCommand("AT+STGI=" + stin, 5000, "STGI");
-            log.Debug("1:" + response);
-
-            response = ExecCommand("AT+STGR=" + stin + ",1,1", 5000, "STGR");
-            stin = GetSTIN(response);
-            if (stin.Equals("") || stin.Equals("99"))
-            {
-                return "99";
-            }
-            response = ExecCommand("AT+STGI=" + stin, 5000, "STGI");
-            log.Debug("2:"+response);
-
-            response = ExecCommand("AT+STGR=" + stin + ",1,1", 5000, "STGR");
-            stin = GetSTIN(response);
-            if (stin.Equals("") || stin.Equals("99"))
-            {
-                return "99";
-            }
-            response = ExecCommand("AT+STGI=" + stin, 5000, "STGI");
-            log.Debug("3:" + response);
-
-            response = ExecCommand("AT+STGR=" + stin + ",1", 5000, "STGR");
-            response = ExecCommand(pin, 5000, "STGR");
-            stin = GetSTIN(response);
-            if (stin.Equals("") || stin.Equals("99"))
-            {
-                return "99";
-            }
-            response = ExecCommand("AT+STGI=" + stin, 5000, "STGI");
-            log.Debug(response);
-            
-            return response;
-        }
-
+        
         private string ActivateSIM()
         {
             Dictionary<string, string> map = new Dictionary<string, string>();
@@ -738,6 +685,40 @@ namespace TMC.ModemPool
             {
                 response = ExecCommand("AT+CMGL=\"ALL\"", 5000, "CMGL");
             }
+            log.Debug("Read SMS: "+response);
+            return response;
+        }
+
+        private string CheckSignal()
+        {
+            string result = "";
+            string response = ExecCommand("AT+CSQ", 3000, "CSQ");
+            if (response.Contains("OK"))
+            {
+                result = response.Replace("\r\n", "").Replace("AT+CSQ", "").Replace("+CSQ:", "").Replace("OK", "").Trim();
+            }
+            return result;
+        }
+
+        private string CheckIMEI()
+        {
+            string result = "";
+            string response = ExecCommand("AT+CCID", 3000, "CCID");
+            if (response.Contains("OK"))
+            {
+                result = response.Replace("\r\n", "").Replace("AT+CCID", "").Replace("+CCID:", "").Replace("\"","").Replace("OK", "").Trim();
+            }
+            return result;
+        }
+
+        private string ReadIncomingSMS(string location)
+        {
+            string response = ExecCommand("AT+CMGF=1", 300, "CMGF");
+            if (response.Contains("OK"))
+            {
+                response = ExecCommand("AT+CMGR=" +location , 5000, "CMGR");
+                log.Debug("CMGR response :" + response);
+            }
             return response;
         }
 
@@ -776,7 +757,7 @@ namespace TMC.ModemPool
                     response = ExecCommand("AT+CMGS=\"" + msisdn + "\"", 300, "CMGS");
                     if (response.Contains(">"))
                     {
-                        response = ExecCommand(message, 5000, "CMGS");
+                        response = ExecCommand(message, 10000, "CMGS");
                     }
                 }
             }
@@ -818,6 +799,7 @@ namespace TMC.ModemPool
                 Thread.Sleep(500);
                 response = ExecCommand("AT + CMGD = 1, " + deleteFlag, 5000, "CMGD");
             }
+            log.Info("response:[" + response + "]");
             return response;
         }
 
@@ -873,6 +855,14 @@ namespace TMC.ModemPool
                         {
                             return CheckSIMModem();
                         }
+                        else if (cmdType == CommandType.RESTART_MODEM)
+                        {
+                            return RestartModem();
+                        }
+                        else if (cmdType == CommandType.ACTIVATE_INCOMING_SMS_INDICATOR)
+                        {
+                            ActivateIncomingSMSIndicator();
+                        }
                         else if (cmdType == CommandType.SEND_USSD)
                         {
                             string[] cmds = ((string)parameters[0]).Split(',');
@@ -893,6 +883,10 @@ namespace TMC.ModemPool
                         {
                             return ReadSMS();
                         }
+                        else if (cmdType == CommandType.READ_NEW_SMS)
+                        {
+                            return ReadIncomingSMS((string)parameters[0]);
+                        }
                         else if (cmdType == CommandType.SEND_SMS)
                         {
                             return SendSMS((string)parameters[0], (string)parameters[1]);
@@ -909,9 +903,13 @@ namespace TMC.ModemPool
                         {
                             return ActivateSIM();
                         }
-                        else if (cmdType == CommandType.MTRONIK)
+                        else if (cmdType == CommandType.CHECK_SIGNAL)
                         {
-                            return MTronik((string)parameters[0], (string)parameters[1]);
+                            return CheckSignal();
+                        }
+                        else if (cmdType == CommandType.CHECK_IMEI)
+                        {
+                            return CheckIMEI();
                         }
                         else if (cmdType == CommandType.SEND_SMS_CDMA)
                         {
@@ -924,10 +922,6 @@ namespace TMC.ModemPool
                         else if (cmdType == CommandType.DELETE_SMS_CDMA)
                         {
                             return DeleteSMSCDMA((string)parameters[0]);
-                        }
-                        else if (cmdType == CommandType.STOK_MTRONIK)
-                        {
-                            return StokMTronik((string)parameters[0]);
                         }
                         return null;
                     }

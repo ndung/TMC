@@ -152,10 +152,16 @@ namespace TMC.Sockets
                     sock.Close();
                 }
             }
+            catch (OutOfMemoryException ex)
+            {
+                log.Error("OutOfMemoryException thrown, exit application...", ex);
+                System.Windows.Forms.Application.Exit();
+            }
             catch (Exception ex)
             {
                 SetupReceiveCallback(sock);
                 log.Error(ex.Message);
+
             }
         }
 

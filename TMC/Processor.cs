@@ -9,6 +9,7 @@ namespace TMC
     class Processor
     {
         Dictionary<string, string> lastSMS = new Dictionary<string, string>();
+        Dictionary<string, string> sentSMS = new Dictionary<string, string>();
 
         public SocketClient SocketClient
         {
@@ -20,7 +21,7 @@ namespace TMC
             get; set;
         }
 
-        private const int INTERVAL = 30000;
+        private const int INTERVAL = 60000;
         public Processor()
         {
             timer = new System.Timers.Timer { Interval = INTERVAL };
@@ -36,7 +37,7 @@ namespace TMC
         }
 
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-
+        
         private void processIncomingSocketMessageThread(object obj, EventArgs args)
         {
             IncomingSocketMessageEventArgs arg = (IncomingSocketMessageEventArgs)args;
@@ -71,30 +72,59 @@ namespace TMC
             }
             else if (arg.Message.StartsWith("SEND"))
             {
-                string id = arg.Message.Substring(4, 6);
-                string comPort = arg.Message.Substring(10, 5);
-                string msisdn = arg.Message.Substring(15, 15).Trim();
-                string message = arg.Message.Substring(30);
-                string response = Communicator.SendSMS(comPort.Trim(), msisdn, message);
-                Console.WriteLine("response:" + response);
-                if (response != null)
+                try
                 {
-                    Console.WriteLine("response.Contains:" + response.Contains("+CMGS:"));
-                    if (response.Contains("+CMGS:"))
+                    string id = arg.Message.Substring(4, 6);
+                    string resp = id + "GAGAL";
+
+                    if (!sentSMS.ContainsKey(id) || !sentSMS[id].Contains("SUKSES"))
                     {
-                        response = response.Substring(response.IndexOf("+CMGS:"));
-                        response = response.Replace("+CMGS:", "");
-                        response = response.Replace("OK", "");
-                        response = response.Replace("\r", "");
-                        response = response.Replace("\n", "");
+                        string comPort = arg.Message.Substring(10, 5);
+                        string msisdn = arg.Message.Substring(15, 15).Trim();
+                        string message = arg.Message.Substring(30);
+                        string response = Communicator.SendSMS(comPort.Trim(), msisdn, message);
+                        log.Info("response : [" + response + "]");
+                        if (response != null)
+                        {
+                            log.Info("response CMGS : [" + response.Contains("+CMGS:") + "]");
+                            if (response.Contains("+CMGS:"))
+                            {
+                                response = response.Substring(response.IndexOf("+CMGS:"));
+                                response = response.Replace("+CMGS:", "");
+                                response = response.Replace("OK", "");
+                                response = response.Replace("\r", "");
+                                response = response.Replace("\n", "");
+                            }
+                            response = response.Trim();
+                            int n;
+                            bool isNumeric = int.TryParse(response, out n);
+                            if (isNumeric)
+                            {
+                                resp = id + "SUKSES. " + response;
+                            }
+                            else
+                            {
+                                resp = id + "GAGAL. " + response;
+                            }
+                        }
+                        if (!sentSMS.ContainsKey(id))
+                        {
+                            sentSMS.Add(id, resp);
+                        }
+                        else
+                        {
+                            sentSMS.Remove(id);
+                            sentSMS.Add(id, resp);
+                        }
                     }
-                    response = response.Trim();
-                    int n;
-                    bool isNumeric = int.TryParse(response, out n);
-                    if (isNumeric)
+                    else
                     {
-                        SocketClient.Send(id + "SUKSES. " + response);
+                        resp = sentSMS[id];
                     }
+                    SocketClient.Send(resp);
+                }catch(Exception ex)
+                {
+                    log.Error("erorr", ex);
                 }
             }
             else if (arg.Message.StartsWith("CDMS"))
@@ -138,7 +168,7 @@ namespace TMC
             else if (arg.Message.StartsWith("DELS"))
             {
                 string comPort = arg.Message.Substring(4, 5).Trim();
-                Communicator.DeleteSMS(comPort, "4");
+                Communicator.DeleteSMS(comPort, "2");
             }
             else if (arg.Message.StartsWith("CDMD"))
             {
@@ -186,39 +216,6 @@ namespace TMC
                     SocketClient.Send(id + response);
                 }
             }
-            else if (arg.Message.StartsWith("ISEV"))
-            {
-                string id = arg.Message.Substring(4, 6);
-                string comPort = arg.Message.Substring(10, 5).Trim();
-                string msisdn = arg.Message.Substring(15,15).Trim();
-                string denom = arg.Message.Substring(30).Trim();
-                string response = Communicator.MTronik(comPort, denom, msisdn);
-                if (response != null)
-                {
-                    response = response.Trim();
-                    response = response.Replace("OK", "");
-                    response = response.Replace("\r", "");
-                    response = response.Replace("\n", "");
-
-                    SocketClient.Send(id + response);
-                }
-            }
-            else if (arg.Message.StartsWith("SMTR"))
-            {
-                string id = arg.Message.Substring(4, 6);
-                string comPort = arg.Message.Substring(10, 5).Trim();
-                string pin = arg.Message.Substring(15).Trim();
-                string response = Communicator.StokMTronik(comPort, pin);
-                if (response != null)
-                {
-                    response = response.Trim();
-                    response = response.Replace("OK", "");
-                    response = response.Replace("\r", "");
-                    response = response.Replace("\n", "");
-
-                    SocketClient.Send(id + response);
-                }
-            }
         }
 
         public void processIncomingSocketMessage(object obj, EventArgs args)
@@ -230,38 +227,76 @@ namespace TMC
         public void processIncomingSMS(object obj, EventArgs args)
         {
             IncomingSMSEventArgs arg = (IncomingSMSEventArgs)args;
-            if (arg != null && arg.Message != null)
+            if (arg != null && arg.Message != null && arg.COMPort !=null)
             {
-                string data = arg.Message.Trim();
-                data = data.Replace("OK", "");
-                data = data.Replace("\r", "");
-                data = data.Replace("\n", "");
-                data = data.Replace("=", ":");
 
-                if (data.Contains("+CMGL:"))
+                string data = arg.Message.Trim();
+
+                if (data.Contains("+CMGR:"))
                 {
-                    data = data.Substring(data.IndexOf("+CMGL:"));
-                    data = data.Replace("+CMGL:", "").Trim();
+                    data = data.Substring(data.IndexOf("+CMGR:"));
+                    data = data.Replace("+CMGR:", "").Trim();
                     data = data.Replace("OK", "");
                     data = data.Replace("\r", "");
                     data = data.Replace("\n", "");
                     data = data.Replace("\"", "");
-                    data = data.Trim();
+                    data = " 1," + data.Trim();
+                    SocketClient.Send("READSM" + arg.COMPort.PadRight(6, ' ') + data);
+                }
+                else
+                {
+                    data = data.Replace("OK", "");
+                    data = data.Replace("\r", "");
+                    data = data.Replace("\n", "");
+                    data = data.Replace("=", ":");
 
-                    if (!data.Equals("AT CMGL") && !data.Equals("\"ALL\""))
+                    if (data.Contains("+CMGL:"))
                     {
-                        data = data.Substring(3);
-                        if (!data.Equals("ERROR")&&!data.Equals(""))
+                        data = data.Substring(data.IndexOf("+CMGL:"));
+                        data = data.Replace("+CMGL:", "").Trim();
+                        data = data.Replace("OK", "");
+                        data = data.Replace("\r", "");
+                        data = data.Replace("\n", "");
+                        data = data.Replace("\"", "");
+                        data = data.Trim();
+
+                        if (!data.Equals("AT CMGL") && !data.Equals("\"ALL\""))
                         {
-                            if (lastSMS.ContainsKey(arg.COMPort))
+                            data = data.Substring(3);
+                            if (!data.Equals("ERROR") && !data.Contains("CME ERROR") && !data.Equals(""))
                             {
-                                lastSMS[arg.COMPort]=data;
-                            }
-                            else
-                            {
-                                SocketClient.Send("READSM" + arg.COMPort.PadRight(6, ' ') + data);
+                                if (lastSMS.ContainsKey(arg.COMPort))
+                                {
+                                    lastSMS[arg.COMPort] = data;
+                                }
+                                else
+                                {
+                                    SocketClient.Send("READSM" + arg.COMPort.PadRight(6, ' ') + data);
+                                }
                             }
                         }
+                    }
+                    else if (data.Contains("+CMT:"))
+                    {
+                        data = data.Substring(data.IndexOf("+CMT:"));
+                        data = data.Replace("+CMT:", "").Trim();
+                        data = data.Replace("OK", "");
+                        data = data.Replace("\r", "");
+                        data = data.Replace("\n", "");
+                        data = data.Replace("\"", "");
+                        data = data.Trim();
+                        SocketClient.Send("READSM" + arg.COMPort.PadRight(6, ' ') + data);
+                    }
+                    else if (data.Contains("+CDS:"))
+                    {
+                        data = data.Substring(data.IndexOf("+CDS:"));
+                        data = data.Replace("+CDS:", "").Trim();
+                        data = data.Replace("OK", "");
+                        data = data.Replace("\r", "");
+                        data = data.Replace("\n", "");
+                        data = data.Replace("\"", "");
+                        data = data.Trim();
+                        SocketClient.Send("READDS" + arg.COMPort.PadRight(6, ' ') + data);
                     }
                 }
             }
@@ -286,7 +321,7 @@ namespace TMC
         {
             if (SocketClient.IsConnected())
             {
-                SocketClient.Send("000000"+Communicator.GetActivePorts());
+                SocketClient.Send("000000"+Communicator.GetActivePortsVer2());
             }
         }
     }

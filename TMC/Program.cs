@@ -26,6 +26,9 @@ namespace TMC
 
                 string readSMSTimer = ConfigurationManager.AppSettings["ReadSMSTimer"];
                 string cdmaPorts = ConfigurationManager.AppSettings["CDMAPorts"];
+                string interval = ConfigurationManager.AppSettings["Interval"];
+                string localPort = ConfigurationManager.AppSettings["LocalPort"];
+                string baudRate = ConfigurationManager.AppSettings["BaudRate"];
                 if (cdmaPorts == null)
                 {
                     cdmaPorts = "";
@@ -35,8 +38,11 @@ namespace TMC
                 {
                     ignoredPorts = "";
                 }
-
-                Communicator communicator = new Communicator(readSMSTimer, cdmaPorts, ignoredPorts);
+                if (interval == null)
+                {
+                    interval = "10000";
+                }
+                Communicator communicator = new Communicator(readSMSTimer, interval, cdmaPorts, ignoredPorts, baudRate);
                 if (readSMSTimer.Equals("Y"))
                 {
                     communicator.IncomingSMSHandler += new IncomingSMSHandler(processor.processIncomingSMS);
@@ -44,6 +50,7 @@ namespace TMC
                 communicator.SIMModemStatusHandler += new SIMModemStatusHandler(processor.processSIMModemStatusUpdate);
                 communicator.OpenAllPorts();
                 communicator.CheckSIMModem();
+                communicator.ActivateIncomingSMSIndicator();
 
                 processor.Communicator = communicator;
                 processor.SocketClient = socketClient;
@@ -55,7 +62,7 @@ namespace TMC
                 }
                 else
                 {
-                    httpServer = new MyHttpServer(8080);
+                    httpServer = new MyHttpServer(Int32.Parse(localPort));
                 }
                 httpServer.Communicator = communicator;
                 Thread server = new Thread(new ThreadStart(httpServer.listen));

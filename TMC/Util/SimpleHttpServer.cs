@@ -233,7 +233,7 @@ namespace TMC.Util
                     }
                 }
             }
-            /*
+            
             if (p.http_url.StartsWith("/sendUSSD"))
             {
                 string port = pars["port"];
@@ -250,6 +250,20 @@ namespace TMC.Util
                 string message = pars["message"];
 
                 string response = Communicator.SendSMS(port, msisdn, message);
+                p.writeSuccess();
+                p.outputStream.WriteLine(response);
+            }
+            else if (p.http_url.StartsWith("/checkSignal"))
+            {
+                string port = pars["port"];
+                string response = Communicator.CheckSignal(port);
+                p.writeSuccess();
+                p.outputStream.WriteLine(response);
+            }
+            else if (p.http_url.StartsWith("/restartModem"))
+            {
+                string port = pars["port"];
+                string response = Communicator.RestartModem(port);
                 p.writeSuccess();
                 p.outputStream.WriteLine(response);
             }
@@ -335,11 +349,26 @@ namespace TMC.Util
                 p.writeSuccess();
                 p.outputStream.WriteLine("ok");
             }
-            else */if (p.http_url.StartsWith("/getActivePorts"))
+            else if (p.http_url.StartsWith("/checkIMEI"))
+            {
+                string port = pars["port"];
+
+                String resp = Communicator.CheckIMEI(port);
+
+                p.writeSuccess();
+                p.outputStream.WriteLine(resp);
+            }
+            else if (p.http_url.StartsWith("/getActivePorts2"))
+            {
+                p.writeSuccess();
+                p.outputStream.WriteLine(Communicator.GetActivePortsVer2());
+            }
+            else if (p.http_url.StartsWith("/getActivePorts"))
             {
                 p.writeSuccess();
                 p.outputStream.WriteLine(Communicator.GetActivePorts());
             }
+            
             /**
             else if (p.http_url.StartsWith("/mtronik"))
             {

@@ -10,7 +10,7 @@ namespace TMC.ModemPool
 
     public delegate void SIMModemStatusHandler(object sender, EventArgs args);
 
-    public class Communicator
+    public class Communicator 
     {
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
             
@@ -20,24 +20,31 @@ namespace TMC.ModemPool
         public event IncomingSMSHandler IncomingSMSHandler;
         public event SIMModemStatusHandler SIMModemStatusHandler;
 
-        private readonly System.Timers.Timer timer;
-        private const int INTERVAL = 10000;
+        //private readonly System.Timers.Timer timer;
+        private int interval = 10000;
         private string[] cdmaPorts;
         private List<string> ignoredPorts;
+        private string baudRate = "115200";
 
-        public Communicator(string readSMSTimer, string cdmaPort, string ignoredPort)
+        public Communicator(string readSMSTimer, string readSMSInterval, string cdmaPort, string ignoredPort, string baudRateStr)
         {
             modemMap = new Dictionary<string, PortHandler>();
             simMap = new Dictionary<string, PortHandler>();
 
+            System.Timers.Timer timer = new System.Timers.Timer { Interval = interval };
+            timer.Elapsed += TimerTick;
+            timer.Start();
+
             if (readSMSTimer.Equals("Y"))
             {
-                timer = new System.Timers.Timer { Interval = INTERVAL };
-                timer.Elapsed += TimerTick;
-                timer.Start();
+                System.Timers.Timer smsReaderTimer = new System.Timers.Timer { Interval = Int32.Parse(readSMSInterval) };
+                smsReaderTimer.Elapsed += ReadSMSTimerTick;
+                smsReaderTimer.Start();    
             }
+
             cdmaPorts = cdmaPort.Split(',');
             ignoredPorts = new List<string>(ignoredPort.Split(','));
+            baudRate = baudRateStr;
         }
 
         public string[] GetAllPorts()
@@ -57,8 +64,26 @@ namespace TMC.ModemPool
                 {
                     // the array contains the string and the pos variable
                     // will have its position in the array
+                    
                     rs = rs + portName + ",";
                 } 
+            }
+            return rs;
+        }
+
+        public string GetActivePortsVer2()
+        {
+            string rs = "";
+            ignoredPorts.ForEach(Console.WriteLine);
+            foreach (string portName in simMap.Keys)
+            {
+                if (!ignoredPorts.Contains(portName))
+                {
+                    string signal = CheckSignal(portName);
+                    string imei = CheckIMEI(portName);
+
+                    rs = rs + portName + "|"+ imei + "|" + signal + ";";
+                }
             }
             return rs;
         }
@@ -76,8 +101,8 @@ namespace TMC.ModemPool
 
         public void OpenPort(string portName)
         {
-            PortHandler portHandler = new PortHandler();
-            bool opened = portHandler.OpenPort(portName, "115200");
+            PortHandler portHandler = new PortHandler(this);
+            bool opened = portHandler.OpenPort(portName, baudRate);
             Console.WriteLine("open "+portName+"="+ opened);
             if (opened)
             {
@@ -109,8 +134,19 @@ namespace TMC.ModemPool
         {
             foreach (string portName in modemMap.Keys)
             {
-                
+
                 Thread thread = new Thread(() => CheckSIMModem(portName));
+                thread.Start();
+                //ThreadPool.QueueUserWorkItem(new WaitCallback(ThreadCheckSIMModem), portName);
+            }
+        }
+
+        public void ActivateIncomingSMSIndicator()
+        {
+            foreach (string portName in modemMap.Keys)
+            {
+
+                Thread thread = new Thread(() => ActivateIncomingSMSIndicator(portName));
                 thread.Start();
                 //ThreadPool.QueueUserWorkItem(new WaitCallback(ThreadCheckSIMModem), portName);
             }
@@ -121,8 +157,14 @@ namespace TMC.ModemPool
             CheckSIMModem((string)stateInfo);
         }
 
+        Dictionary<string, int> counterMap = new Dictionary<string, int>();
+
         private string CheckSIMModem(string portName)
         {
+            if (!counterMap.ContainsKey(portName))
+            {
+                counterMap.Add(portName,0);
+            }
             PortHandler handler = modemMap[portName];
             string response = handler.ProcessCommand(CommandType.CHECK_SIM_MODEM, new object[] { });
             if (response != null)
@@ -132,6 +174,7 @@ namespace TMC.ModemPool
                 {
                     if (!simMap.ContainsKey(portName))
                     {
+                        counterMap[portName] = 0;
                         log.Info(portName + " IS READY");
                         simMap.Add(portName, handler);
                     }
@@ -140,13 +183,67 @@ namespace TMC.ModemPool
                 {
                     if (simMap.ContainsKey(portName))
                     {
-                        log.Info(portName + " IS NOT READY");
-                        simMap.Remove(portName);
+                        if (counterMap.ContainsKey(portName))
+                        {
+                            int counter = counterMap[portName];
+                            counter = counter + 1;
+                            if (counter > 5)
+                            {
+                                log.Info(portName + " IS NOT READY");
+                                counterMap[portName] = counter;
+                                simMap.Remove(portName);
+                            }
+                        }                        
                     }
                 }
                 OnStatusUpdate(portName, response);
             }
             return response;
+        }
+
+        private void ActivateIncomingSMSIndicator(string portName)
+        {
+            PortHandler handler = modemMap[portName];
+            handler.ProcessCommand(CommandType.ACTIVATE_INCOMING_SMS_INDICATOR, new object[] { });            
+        }
+
+        public string RestartModem(string strPortName)
+        {
+            if (!simMap.ContainsKey(strPortName))
+            {
+                return "Modem port or SIM is not ready";
+            }
+            else
+            {
+                PortHandler handler = simMap[strPortName];
+                return handler.ProcessCommand(CommandType.RESTART_MODEM, new object[] { }); ;
+            }
+        }
+
+        public string CheckSignal(string strPortName)
+        {
+            if (!simMap.ContainsKey(strPortName))
+            {
+                return "Modem port or SIM is not ready";
+            }
+            else
+            {
+                PortHandler handler = simMap[strPortName];
+                return handler.ProcessCommand(CommandType.CHECK_SIGNAL, new object[] { }); ;
+            }
+        }
+
+        public string CheckIMEI(string strPortName)
+        {
+            if (!simMap.ContainsKey(strPortName))
+            {
+                return "Modem port or SIM is not ready";
+            }
+            else
+            {
+                PortHandler handler = simMap[strPortName];
+                return handler.ProcessCommand(CommandType.CHECK_IMEI, new object[] { }); ;
+            }
         }
 
         public string SendUSSD(string strPortName, string command)
@@ -162,7 +259,7 @@ namespace TMC.ModemPool
             }
         }
 
-        private void OnIncomingSMS(string comPort, string message)
+        public void OnIncomingSMS(string comPort, string message)
         {
             if (IncomingSMSHandler != null)
             {
@@ -187,7 +284,11 @@ namespace TMC.ModemPool
 
         private void TimerTick(object sender, EventArgs e)
         {
-            CheckSIMModem();
+            CheckSIMModem();            
+        }
+
+        private void ReadSMSTimerTick(object sender, EventArgs e)
+        {
             foreach (string portName in simMap.Keys)
             {
                 //ThreadPool.QueueUserWorkItem(new WaitCallback(ThreadReadSMS), portName);
@@ -199,6 +300,12 @@ namespace TMC.ModemPool
                 Thread thread = new Thread(() => ReadSMSCDMA(portName));
                 thread.Start();
             }
+        }
+
+        public void ReadIncomingSMS(string portName, string location)
+        {
+            Thread thread = new Thread(() => ReadNewSMS(portName, location));
+            thread.Start();
         }
         
         private void ThreadReadSMS(Object stateInfo)
@@ -218,6 +325,18 @@ namespace TMC.ModemPool
             if (simMap.ContainsKey(strPortName)){
                 PortHandler handler = simMap[strPortName];
                 string response = handler.ProcessCommand(CommandType.READ_SMS, new object[] { });
+                OnIncomingSMS(strPortName, response);
+                return response;
+            }
+            return null;
+        }
+
+        private string ReadNewSMS(string strPortName, string location)
+        {
+            if (simMap.ContainsKey(strPortName))
+            {
+                PortHandler handler = simMap[strPortName];
+                string response = handler.ProcessCommand(CommandType.READ_NEW_SMS, new object[] { location });
                 OnIncomingSMS(strPortName, response);
                 return response;
             }
@@ -313,31 +432,6 @@ namespace TMC.ModemPool
                 return handler.ProcessCommand(CommandType.SIM_ACTIVATION, new object[] { });
             }
         }
-
-        public string MTronik(string comPort, string denom, string msisdn)
-        {
-            if (!simMap.ContainsKey(comPort))
-            {
-                return "Modem port or SIM is not ready";
-            }
-            else
-            {
-                PortHandler handler = simMap[comPort];
-                return handler.ProcessCommand(CommandType.MTRONIK, new object[] {denom,msisdn});
-            }
-        }
-
-        public string StokMTronik(string comPort, string pin)
-        {
-            if (!simMap.ContainsKey(comPort))
-            {
-                return "Modem port or SIM is not ready";
-            }
-            else
-            {
-                PortHandler handler = simMap[comPort];
-                return handler.ProcessCommand(CommandType.STOK_MTRONIK, new object[] { pin });
-            }
-        }
+       
     }
 }
